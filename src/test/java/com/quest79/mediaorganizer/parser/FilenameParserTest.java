@@ -60,4 +60,18 @@ class FilenameParserTest {
         assertEquals(MediaKind.MOVIE, parsed.kind());
         assertTrue(parsed.title().contains("Movie 3"));
     }
+
+    @Test
+    void parsesUnderscoreAnimeReleaseAndDoesNotKeepTechnicalJunkInTitle() {
+        var parsed = parser.parse(Path.of("[Cleo]hack_Sign_-_02_(Dual Audio_10bit_DVD480p_x265).mkv"));
+
+        assertEquals("hack Sign", parsed.title());
+        assertEquals(2, parsed.absoluteEpisode());
+        assertEquals("Cleo", parsed.releaseGroup());
+        assertEquals("480p", parsed.resolution());
+        assertEquals("HEVC", parsed.codec());
+        assertEquals("Dual Audio", parsed.language());
+        assertEquals(MediaKind.SERIES_EPISODE, parsed.kind());
+        assertTrue(parsed.confidence() >= 0.85);
+    }
 }

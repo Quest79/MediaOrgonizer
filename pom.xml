@@ -6,7 +6,7 @@
 
     <groupId>com.quest79</groupId>
     <artifactId>media-organizer</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <name>Media Organizer</name>
     <description>Safe, intelligent media library organizer for movies, anime, and TV.</description>
 
@@ -14,6 +14,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <javafx.version>21.0.6</javafx.version>
+        <jackson.version>2.18.2</jackson.version>
         <junit.version>5.11.4</junit.version>
     </properties>
 
@@ -22,6 +23,12 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>

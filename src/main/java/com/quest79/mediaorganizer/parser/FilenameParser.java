@@ -15,6 +15,7 @@ public final class FilenameParser {
 
     private static final Pattern LEADING_GROUP = Pattern.compile("^\\[([^]\\r\\n]+)]\\s*");
     private static final Pattern BRACKET = Pattern.compile("\\[([^]\\r\\n]+)]");
+    private static final Pattern PAREN_GROUP = Pattern.compile("\\(([^)]*)\\)");
     private static final Pattern YEAR = Pattern.compile("(?<!\\d)(19\\d{2}|20\\d{2})(?!\\d)");
     private static final Pattern SEASON_EPISODE = Pattern.compile(
             "(?i)(?<![A-Z0-9])S(\\d{1,2})[ ._-]*E(\\d{1,3})(?:[ ._-]*(?:-|~|to)[ ._-]*(?:S\\d{1,2}[ ._-]*)?E?(\\d{1,3}))?(?!\\d)"
@@ -25,22 +26,31 @@ public final class FilenameParser {
     private static final Pattern ABSOLUTE_AT_END = Pattern.compile(
             "(?i)^(.*?)(?:\\s+-\\s+|\\s+)(\\d{1,3})(?:v\\d+)?(?:\\s*-\\s*(\\d{1,3}))?\\s*$"
     );
-    private static final Pattern RESOLUTION = Pattern.compile("(?i)(?<!\\d)(480p|576p|720p|1080p|1440p|2160p|4320p|4k|8k)(?!\\w)");
-    private static final Pattern CODEC = Pattern.compile("(?i)\\b(x264|x265|h[ ._-]?264|h[ ._-]?265|hevc|av1|vp9|mpeg[ ._-]?2)\\b");
-    private static final Pattern HDR = Pattern.compile("(?i)\\b(HDR10\\+?|HDR|Dolby[ ._-]?Vision|DV)\\b");
-    private static final Pattern AUDIO = Pattern.compile("(?i)\\b(TrueHD(?:[ ._-]?Atmos)?|Atmos|DTS(?:[ ._-]?HD(?:[ ._-]?MA)?)?|DDP?5\\.?1|EAC3|AC3|AAC(?:2\\.?0|5\\.?1)?|FLAC|Opus)\\b");
+
+    // Deliberately do not use \b here: underscore is a word character and is extremely common in release names.
+    private static final Pattern RESOLUTION = Pattern.compile(
+            "(?i)(?<![A-Z0-9])(?:DVD|BD|UHD)?[ ._-]*(480p|576p|720p|1080p|1440p|2160p|4320p|4k|8k)(?![A-Z0-9])"
+    );
+    private static final Pattern CODEC = Pattern.compile(
+            "(?i)(?<![A-Z0-9])(x264|x265|h[ ._-]?264|h[ ._-]?265|hevc|av1|vp9|mpeg[ ._-]?2)(?![A-Z0-9])"
+    );
+    private static final Pattern HDR = Pattern.compile(
+            "(?i)(?<![A-Z0-9])(HDR10\\+?|HDR|Dolby[ ._-]?Vision|DV)(?![A-Z0-9])"
+    );
+    private static final Pattern AUDIO = Pattern.compile(
+            "(?i)(?<![A-Z0-9])(TrueHD(?:[ ._-]?Atmos)?|Atmos|DTS(?:[ ._-]?HD(?:[ ._-]?MA)?)?|DDP?5\\.?1|EAC3|AC3|AAC(?:2\\.?0|5\\.?1)?|FLAC|Opus)(?![A-Z0-9])"
+    );
+    private static final Pattern LANGUAGE = Pattern.compile(
+            "(?i)(?<![A-Z0-9])(English|Japanese|Dual[ ._-]?Audio|Multi[ ._-]?Audio|Dub(?:bed)?|Sub(?:bed)?)(?![A-Z0-9])"
+    );
     private static final Pattern EDITION = Pattern.compile(
-            "(?i)\\b(Director'?s[ ._-]?Cut|Extended(?:[ ._-]?Edition)?|Remaster(?:ed)?|Unrated|Theatrical(?:[ ._-]?Cut)?|Special[ ._-]?Edition|Ultimate[ ._-]?Edition)\\b"
+            "(?i)(?<![A-Z0-9])(Director'?s[ ._-]?Cut|Extended(?:[ ._-]?Edition)?|Remaster(?:ed)?|Unrated|Theatrical(?:[ ._-]?Cut)?|Special[ ._-]?Edition|Ultimate[ ._-]?Edition)(?![A-Z0-9])"
     );
-    private static final Pattern PART = Pattern.compile("(?i)\\bPart[ ._-]?(\\d{1,2})\\b");
-    private static final Pattern DISC = Pattern.compile("(?i)\\b(?:Disc|Disk|CD)[ ._-]?(\\d{1,2})\\b");
-    private static final Pattern SPECIAL = Pattern.compile("(?i)\\b(OVA|ONA|Specials?|SP)\\b");
-    private static final Pattern EXTRA = Pattern.compile("(?i)\\b(NCOP|NCED|Trailer|Teaser|Interview|Featurette|Sample)\\b");
-    private static final Pattern MOVIE_WORD = Pattern.compile("(?i)\\b(Movie|Film)\\b");
-    private static final Pattern LANGUAGE = Pattern.compile("(?i)\\b(English|Japanese|Dual[ ._-]?Audio|Multi[ ._-]?Audio|Dub(?:bed)?|Sub(?:bed)?)\\b");
-    private static final Pattern TECH_PARENS = Pattern.compile(
-            "(?i)\\((?:480p|576p|720p|1080p|1440p|2160p|4320p|4k|8k|x26[45]|h26[45]|hevc|av1|bluray|web[ ._-]?dl|webrip)[^)]*\\)"
-    );
+    private static final Pattern PART = Pattern.compile("(?i)(?<![A-Z0-9])Part[ ._-]?(\\d{1,2})(?![A-Z0-9])");
+    private static final Pattern DISC = Pattern.compile("(?i)(?<![A-Z0-9])(?:Disc|Disk|CD)[ ._-]?(\\d{1,2})(?![A-Z0-9])");
+    private static final Pattern SPECIAL = Pattern.compile("(?i)(?<![A-Z0-9])(OVA|ONA|Specials?|SP)(?![A-Z0-9])");
+    private static final Pattern EXTRA = Pattern.compile("(?i)(?<![A-Z0-9])(NCOP|NCED|Trailer|Teaser|Interview|Featurette|Sample)(?![A-Z0-9])");
+    private static final Pattern MOVIE_WORD = Pattern.compile("(?i)(?<![A-Z0-9])(Movie|Film)(?![A-Z0-9])");
     private static final Pattern HASH = Pattern.compile("(?i)^[A-F0-9]{6,12}$");
 
     private static final Set<String> NON_GROUP_TOKENS = Set.of(
@@ -57,7 +67,7 @@ public final class FilenameParser {
         Matcher leadingGroupMatcher = LEADING_GROUP.matcher(working);
         if (leadingGroupMatcher.find()) {
             String candidate = leadingGroupMatcher.group(1).trim();
-            if (!isTechnicalBracket(candidate)) {
+            if (!isTechnicalGroup(candidate)) {
                 releaseGroup = candidate;
                 evidence.add("leading release/fansub group: " + candidate);
                 working = working.substring(leadingGroupMatcher.end());
@@ -83,7 +93,7 @@ public final class FilenameParser {
         if (disc != null) evidence.add("disc number: " + disc);
 
         working = removeTechnicalBrackets(working);
-        working = TECH_PARENS.matcher(working).replaceAll(" ");
+        working = removeTechnicalParentheses(working);
         working = removePattern(working, RESOLUTION);
         working = removePattern(working, CODEC);
         working = removePattern(working, HDR);
@@ -130,7 +140,6 @@ public final class FilenameParser {
         boolean extra = EXTRA.matcher(stem).find();
         boolean movieWord = MOVIE_WORD.matcher(stem).find();
 
-        String title;
         if (!explicitEpisode && !movieWord && !special && !extra) {
             String absoluteCandidate = cleanupForAbsoluteMatch(working);
             Matcher absoluteMatcher = ABSOLUTE_AT_END.matcher(absoluteCandidate);
@@ -145,7 +154,7 @@ public final class FilenameParser {
             }
         }
 
-        title = cleanTitle(working);
+        String title = cleanTitle(working);
 
         MediaKind kind;
         double confidence;
@@ -196,7 +205,7 @@ public final class FilenameParser {
         StringBuilder out = new StringBuilder();
         while (matcher.find()) {
             String token = matcher.group(1).trim();
-            if (HASH.matcher(token).matches() || isTechnicalBracket(token)) {
+            if (isTechnicalGroup(token)) {
                 matcher.appendReplacement(out, " ");
             } else {
                 matcher.appendReplacement(out, Matcher.quoteReplacement(" " + token + " "));
@@ -206,20 +215,41 @@ public final class FilenameParser {
         return out.toString();
     }
 
-    private static boolean isTechnicalBracket(String token) {
+    private static String removeTechnicalParentheses(String input) {
+        Matcher matcher = PAREN_GROUP.matcher(input);
+        StringBuilder out = new StringBuilder();
+
+        while (matcher.find()) {
+            String token = matcher.group(1).trim();
+            if (isTechnicalGroup(token)) {
+                matcher.appendReplacement(out, " ");
+            } else {
+                matcher.appendReplacement(out, Matcher.quoteReplacement(" (" + token + ") "));
+            }
+        }
+
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private static boolean isTechnicalGroup(String token) {
         String normalized = token.toLowerCase(Locale.ROOT).replace(" ", "");
-        if (NON_GROUP_TOKENS.contains(normalized)) return true;
-        return HASH.matcher(token).matches()
-                || RESOLUTION.matcher(token).find()
+        if (HASH.matcher(token).matches() || NON_GROUP_TOKENS.contains(normalized)) {
+            return true;
+        }
+
+        return RESOLUTION.matcher(token).find()
                 || CODEC.matcher(token).find()
                 || HDR.matcher(token).find()
-                || AUDIO.matcher(token).find();
+                || AUDIO.matcher(token).find()
+                || LANGUAGE.matcher(token).find()
+                || token.matches("(?i).*(?:10bit|8bit|Hi10P|DVD|Blu[ ._-]?Ray|WEB[ ._-]?DL|WEBRip|REMUX|BDRip).*");
     }
 
     private static String removeSourceNoise(String input) {
         return input
-                .replaceAll("(?i)\\b(?:UHD|Blu[ ._-]?Ray|BDRip|WEB[ ._-]?DL|WEBRip|REMUX|DVDRip|HDTV|AMZN|NF|CR)\\b", " ")
-                .replaceAll("(?i)\\b(?:10bit|8bit|Hi10P)\\b", " ");
+                .replaceAll("(?i)(?<![A-Z0-9])(?:UHD|DVD|Blu[ ._-]?Ray|BDRip|WEB[ ._-]?DL|WEBRip|REMUX|DVDRip|HDTV|AMZN|NF|CR)(?![A-Z0-9])", " ")
+                .replaceAll("(?i)(?<![A-Z0-9])(?:10bit|8bit|Hi10P)(?![A-Z0-9])", " ");
     }
 
     private static String removePattern(String input, Pattern pattern) {
@@ -235,16 +265,13 @@ public final class FilenameParser {
     }
 
     private static String cleanTitle(String input) {
-        String cleaned = input
-                .replaceAll("(?i)\\b(?:S\\d{1,2}|Season[ ._-]?\\d{1,2})\\b", " ")
+        return input
+                .replaceAll("(?i)(?<![A-Z0-9])(?:S\\d{1,2}|Season[ ._-]?\\d{1,2})(?![A-Z0-9])", " ")
                 .replaceAll("[._]+", " ")
                 .replaceAll("\\s+-\\s*$", " ")
                 .replaceAll("^\\s*-\\s+", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
-
-        cleaned = cleaned.replaceAll("(?i)\\b(?:Movie)\\s+(\\d{1,2})\\b", "Movie $1");
-        return cleaned;
     }
 
     private static String firstGroup(Pattern pattern, String input) {

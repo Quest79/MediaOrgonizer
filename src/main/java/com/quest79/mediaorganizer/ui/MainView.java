@@ -1,5 +1,8 @@
 package com.quest79.mediaorganizer.ui;
 
+import com.quest79.mediaorganizer.matching.MediaMatcher;
+import com.quest79.mediaorganizer.metadata.AniListProvider;
+import com.quest79.mediaorganizer.metadata.MetadataCandidate;
 import com.quest79.mediaorganizer.model.MediaFile;
 import com.quest79.mediaorganizer.model.MatchStatus;
 import com.quest79.mediaorganizer.scanner.MediaScanner;
@@ -34,7 +37,6 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,12 +47,14 @@ public final class MainView extends BorderPane {
     private final Stage stage;
     private final LocalSettings settings = new LocalSettings();
     private final MediaScanner scanner = new MediaScanner();
+    private final AniListProvider aniList = new AniListProvider();
+    private final MediaMatcher matcher = new MediaMatcher();
     private final ObservableList<MediaFile> rows = FXCollections.observableArrayList();
 
     private final TextField folderField = new TextField();
     private final Button browseButton = new Button("Browse");
     private final Button scanButton = new Button("Scan");
-    private final Button manualMatchButton = new Button("Manual Match");
+    private final Button manualMatchButton = new Button("Find Matches...");
     private final Button applyButton = new Button("Apply Changes");
     private final Button undoButton = new Button("Undo");
     private final TableView<MediaFile> table = new TableView<>(rows);
@@ -117,7 +121,9 @@ public final class MainView extends BorderPane {
         detailsTitle.getStyleClass().add("section-title");
 
         manualMatchButton.setDisable(true);
-        manualMatchButton.setTooltip(new Tooltip("Enabled in the manual metadata-match milestone."));
+        manualMatchButton.setTooltip(new Tooltip(
+                "Search AniList for possible matches and choose the correct title."
+        ));
 
         VBox detailPane = new VBox(10, detailsTitle, details, new Separator(), manualMatchButton);
         detailPane.setPadding(new Insets(14));
@@ -180,6 +186,7 @@ public final class MainView extends BorderPane {
 
         table.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, selected) -> {
             showDetails(selected);
+            manualMatchButton.setDisable(selected == null);
         });
     }
 
@@ -198,6 +205,7 @@ public final class MainView extends BorderPane {
         browseButton.setOnAction(event -> chooseFolder());
         scanButton.setOnAction(event -> startScan());
         folderField.setOnAction(event -> startScan());
+        manualMatchButton.setOnAction(event -> findMatches());
     }
 
     private void chooseFolder() {
@@ -229,13 +237,10 @@ public final class MainView extends BorderPane {
         details.clear();
         statusLabel.setText("Scanning " + root + "...");
 
-        AtomicInteger done = new AtomicInteger();
-
         Task<List<MediaFile>> task = new Task<>() {
             @Override
             protected List<MediaFile> call() throws Exception {
                 return scanner.scan(root, (current, total) -> {
-                    done.set(current);
                     if (total > 0) {
                         updateProgress(current, total);
                         if (current == 1 || current % 50 == 0 || current == total) {
@@ -254,7 +259,7 @@ public final class MainView extends BorderPane {
             statusLabel.textProperty().unbind();
             rows.setAll(task.getValue());
             updateStats();
-            statusLabel.setText("Scan complete. No files were modified.");
+            statusLabel.setText("Scan complete. Select any uncertain title and click Find Matches.");
             setScanning(false);
             if (!rows.isEmpty()) {
                 table.getSelectionModel().selectFirst();
@@ -275,10 +280,88 @@ public final class MainView extends BorderPane {
         thread.start();
     }
 
+    private void findMatches() {
+        MediaFile selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+
+        String initialQuery = suggestedQuery(selected);
+        ManualMatchDialog dialog = new ManualMatchDialog(stage, aniList, selected, initialQuery);
+
+        dialog.showAndWait().ifPresent(candidate -> applyCandidateToGroup(selected, candidate));
+    }
+
+    private void applyCandidateToGroup(MediaFile selected, MetadataCandidate candidate) {
+        String selectedKey = groupKey(selected.parsed().title());
+        Path selectedParent = selected.path().getParent();
+
+        int selectedIndex = rows.indexOf(selected);
+        int changed = 0;
+
+        for (int i = 0; i < rows.size(); i++) {
+            MediaFile file = rows.get(i);
+
+            boolean sameFile = file.equals(selected);
+            boolean sameFolderAndTitle = selectedParent != null
+                    && selectedParent.equals(file.path().getParent())
+                    && !selectedKey.isBlank()
+                    && selectedKey.equals(groupKey(file.parsed().title()));
+
+            if (sameFile || sameFolderAndTitle) {
+                rows.set(i, matcher.applyManualMatch(file, candidate));
+                changed++;
+            }
+        }
+
+        table.refresh();
+        updateStats();
+
+        if (selectedIndex >= 0 && selectedIndex < rows.size()) {
+            table.getSelectionModel().select(selectedIndex);
+            showDetails(rows.get(selectedIndex));
+        }
+
+        statusLabel.setText(
+                "Matched " + changed + (changed == 1 ? " file" : " sibling files")
+                        + " to " + candidate.canonicalTitle()
+                        + " using AniList. No files were modified."
+        );
+    }
+
+    private String suggestedQuery(MediaFile file) {
+        String parsedTitle = file.parsed().title() == null ? "" : file.parsed().title().trim();
+
+        Path parent = file.path().getParent();
+        String folderTitle = parent == null || parent.getFileName() == null
+                ? ""
+                : parent.getFileName().toString().trim();
+
+        if (parsedTitle.isBlank()) return cleanSearchTitle(folderTitle);
+        if (!folderTitle.isBlank() && parsedTitle.length() > folderTitle.length() + 15) {
+            return cleanSearchTitle(folderTitle);
+        }
+
+        return cleanSearchTitle(parsedTitle);
+    }
+
+    private static String cleanSearchTitle(String value) {
+        if (value == null) return "";
+        return value
+                .replace('_', ' ')
+                .replaceAll("\\s+-\\s+\\d{1,3}.*$", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static String groupKey(String value) {
+        if (value == null) return "";
+        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "");
+    }
+
     private void setScanning(boolean scanning) {
         browseButton.setDisable(scanning);
         scanButton.setDisable(scanning);
         folderField.setDisable(scanning);
+        manualMatchButton.setDisable(scanning || table.getSelectionModel().getSelectedItem() == null);
         progressBar.setVisible(scanning);
         if (!scanning) {
             progressBar.setProgress(0);
