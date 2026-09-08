@@ -157,7 +157,7 @@ public final class AniListProvider implements MetadataProvider {
         LocalDate releaseDate = date(item.path("startDate"));
 
         return new MetadataCandidate(
-                id(),
+                "anilist",
                 item.path("id").asText(""),
                 kind,
                 canonical,
@@ -171,10 +171,6 @@ public final class AniListProvider implements MetadataProvider {
                 format,
                 nullableInt(item.path("episodes"))
         );
-    }
-
-    private static String id() {
-        return "anilist";
     }
 
     private static String text(JsonNode node) {
